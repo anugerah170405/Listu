@@ -1,0 +1,24 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic-settings>=2.6.0
+python-dotenv>=1.0.1
+aiofiles>=23.2.1
+python-multipart>=0.0.18
+
+# Audio Processing & AI
+torch
+torchaudio
+numpy>=1.24.0,<2.0.0
+soundfile>=0.12.1
+librosa>=0.10.1
+ffmpeg-python>=0.2.0
+transformers
+scipy
+
+# 1. Vocal Separation (BS-RoFormer / UVR / Demucs)
+audio-separator>=0.25.0
+
+# 3 & 4. Lyrics Generation & Word-Level Timestamp Alignment
+stable-ts>=2.17.0
+faster-whisper>=1.0.0
+

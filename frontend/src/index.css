@@ -1,0 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@layer base {
+
+  html,
+  body {
+    font-family: 'Inter Tight', 'Inter', system-ui, sans-serif;
+    background: #fff;
+    overscroll-behavior: none;
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+}
