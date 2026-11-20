@@ -46,7 +46,7 @@ export default function ProgressLine({ time, duration, onSeek }: ProgressLinePro
                 style={{ left: `${ratio * 100}%` }}
             />
             <span
-                className={`pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium whitespace-nowrap text-neutral-900 tabular-nums shadow-[0_6px_24px_rgba(0,0,0,0.14)] ring-1 ring-black/5 transition-opacity duration-150 ${hover ? 'opacity-100' : 'opacity-0'}`}
+                className={`pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 rounded-full bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-neutral-900 tabular-nums shadow-[0_6px_24px_rgba(0,0,0,0.14)] ring-1 ring-black/5 transition-opacity duration-150 ${hover ? 'opacity-100' : 'opacity-0'}`}
                 style={{ left: `${ratio * 100}%` }}
             >
                 {formatTime(time)} / {formatTime(duration)}

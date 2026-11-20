@@ -12,6 +12,7 @@ export type Card = {
     separationError?: string
     lyrics?: string[]
     lyricTimes?: number[]
+    language?: string
     genre?: string
 }
 

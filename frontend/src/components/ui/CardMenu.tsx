@@ -26,13 +26,12 @@ export default function CardMenu({
         }
     }, [onClose])
 
-    // Keep the menu strip inside the viewport
     const W = 176
     const H = 100
     const left = Math.max(8, Math.min(x, window.innerWidth - W - 8))
     const top = Math.max(8, Math.min(y, window.innerHeight - H - 8))
 
-    const item = 'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-colors hover:bg-white/10 cursor-pointer'
+    const item = 'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-white/10 cursor-pointer'
 
     return (
         <>

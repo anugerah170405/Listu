@@ -235,30 +235,25 @@ export default function LiquidScene({
                     ctx.fillText(L.card.duration, introX + introW - 14, topY + 43)
                 }
 
-                const lines = L.lines.length > 0 ? L.lines : ['Lirik belum tersedia untuk lagu ini.']
+                const lines = L.lines.length > 0 ? L.lines : ['Lyrics not available for this track.']
                 const active = L.lines.length > 0 ? L.active : 0
 
                 const fresh = ly.lines === null
                 if (ly.lines !== lines || ly.layoutW !== W) layoutLyrics(ctx, ly, lines, W)
 
-                // Auto-focus when the active lyric line changes
                 if (active !== ly.activeLine) {
                     ly.activeLine = active
-                    const idx = Math.max(0, active)
-                    if (ly.blocks[idx]) {
-                        const blk = ly.blocks[idx]
+                    if (active >= 0 && ly.blocks[active]) {
+                        const blk = ly.blocks[active]
                         ly.target = clampLyrics(blk.y + blk.h / 2)
                         if (fresh) ly.cur = ly.target
                     }
                 }
 
-                // Smooth absolute scrolling
                 ly.cur += (ly.target - ly.cur) * Math.min(1, dt * 7)
 
-                // Track header
                 renderHeader(H / 2 - ly.cur)
 
-                // Lyrics lines
                 ctx.textAlign = 'center'
                 ctx.textBaseline = 'middle'
                 ctx.font = `600 ${ly.fs}px "Inter Tight", "Inter", sans-serif`

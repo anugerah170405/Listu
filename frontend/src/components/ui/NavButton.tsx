@@ -18,7 +18,7 @@ export default function NavButton({
     return (
         <div className="group relative">
             <span
-                className={`pointer-events-none absolute bottom-full left-1/2 mb-4 -translate-x-1/2 translate-y-1 rounded-full bg-white px-4 py-2 text-[13px] font-medium whitespace-nowrap text-neutral-900 opacity-0 shadow-[0_6px_24px_rgba(0,0,0,0.14)] ring-1 ring-black/5 transition-all duration-200 ${hideTip ? '' : 'group-hover:translate-y-0 group-hover:opacity-100'}`}
+                className={`pointer-events-none absolute bottom-full left-1/2 mb-4 -translate-x-1/2 translate-y-1 rounded-full bg-white px-4 py-2 text-xs font-medium whitespace-nowrap text-neutral-900 opacity-0 shadow-[0_6px_24px_rgba(0,0,0,0.14)] ring-1 ring-black/5 transition-all duration-200 ${hideTip ? '' : 'group-hover:translate-y-0 group-hover:opacity-100'}`}
             >
                 {label}
             </span>
