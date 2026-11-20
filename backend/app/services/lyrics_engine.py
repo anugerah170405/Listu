@@ -1,219 +1,129 @@
-"""
-Module 3 & 4: Lyrics Generation & Synchronization Engine
-Architecture: OpenAI Whisper / stable-ts (Word-Level Timestamp Alignment)
-Library: stable-ts / faster-whisper
-
-Deskripsi:
-1. Lyrics Generation: Mentranskripsi vokal menjadi teks lirik lagu otomatis.
-2. Lyrics Synchronization: Menghasilkan word-level timestamps (penanda waktu persis per kata)
-   dan line-level timestamps untuk format karaoke (LRC & JSON).
-3. Forced Alignment: Menyelaraskan teks lirik yang sudah ada dengan audio jika lirik resmi sudah tersedia.
-"""
-
 import json
-import os
+import logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+NO_LANGUAGE = {"", "none", "null", "undefined", "auto"}
+FALLBACK_LANGUAGE = "id"
+
+
+def normalize_language(language: Optional[str]) -> Optional[str]:
+    lang = (language or "").strip().lower()
+    return None if lang in NO_LANGUAGE else lang
 
 
 class LyricsEngine:
-    """
-    Engine untuk ekstraksi lirik dan sinkronisasi timestamp kata-per-kata.
-    """
-
-    def __init__(
-        self,
-        model_size: str = "base",  # tiny, base, small, medium, large-v3
-        device: Optional[str] = None,
-        output_dir: str = "./output/lyrics"
-    ):
+    def __init__(self, model_size: str = "small", device: Optional[str] = None, output_dir: str = "./output/lyrics"):
         self.model_size = model_size
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._model = None
         self.device = device or self._detect_device()
+        self._model = None
 
-    def _detect_device(self) -> str:
-        """
-        Deteksi hardware akselerasi.
-        Catatan Mac (Apple Silicon):
-        Whisper Word-Level DTW Alignment memerlukan float64 yang belum didukung oleh PyTorch MPS.
-        Oleh karena itu, di Mac kita gunakan 'cpu' yang dioptimalkan secara multi-thread dengan ARM NEON.
-        """
+    @staticmethod
+    def _detect_device() -> str:
+        # Word-level DTW butuh float64 yang belum didukung MPS, jadi Mac memakai CPU
         try:
             import torch
-            if torch.cuda.is_available():
-                return "cuda"
-        except Exception:
-            pass
-        return "cpu"
 
-    def _init_model(self):
-        """Lazy load model Whisper stable-ts."""
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            return "cpu"
+
+    def _load_model(self):
         if self._model is not None:
             return
-
         try:
             import stable_whisper
-        except ImportError:
-            raise ImportError(
-                "Pustaka 'stable-ts' belum terpasang. "
-                "Jalankan: pip install stable-ts"
-            )
+        except ImportError as e:
+            raise ImportError("'stable-ts' library is not installed. Run: pip install stable-ts") from e
 
-        print(f"[LyricsEngine] Memuat Whisper ({self.model_size}) pada device: {self.device}...")
+        logger.info("Loading Whisper (%s) on device: %s", self.model_size, self.device)
         self._model = stable_whisper.load_model(self.model_size, device=self.device)
-        print("[LyricsEngine] Model Whisper siap digunakan.")
 
-    def transcribe_and_sync(
-        self,
-        vocal_audio_path: str,
-        language: Optional[str] = None,
-        vad: bool = False
-    ) -> Dict[str, Any]:
-        """
-        Mentranskripsi audio vokal dan menyelaraskan penanda waktu per kata (word-level).
+    def _resolve_audio(self, path: str) -> Path:
+        audio = Path(path)
+        if not audio.exists():
+            raise FileNotFoundError(f"Audio file not found: {path}")
+        return audio.resolve()
 
-        Args:
-            vocal_audio_path: Path ke file vokal (hasil separasi disarankan)
-            language: Kode bahasa (e.g. 'id', 'en', 'ja') atau None (auto-detect)
-            vad: Voice Activity Detection (default False untuk lagu agar intro musik tidak memotong lirik)
-        """
-        self._init_model()
+    def _detect_language(self, audio: Path) -> str:
+        try:
+            import whisper
 
-        audio_file = Path(vocal_audio_path)
-        if not audio_file.exists():
-            raise FileNotFoundError(f"File audio vokal tidak ditemukan: {vocal_audio_path}")
+            sample = whisper.pad_or_trim(whisper.load_audio(str(audio)))
+            mel = whisper.log_mel_spectrogram(sample).to(self._model.device)
+            _, probs = self._model.detect_language(mel)
+            return max(probs, key=probs.get)
+        except Exception as e:
+            logger.warning("Language detection failed, fallback to '%s': %s", FALLBACK_LANGUAGE, e)
+            return FALLBACK_LANGUAGE
 
-        print(f"[LyricsEngine] Memproses transkripsi & sinkronisasi untuk: {audio_file.name}...")
+    def transcribe_and_sync(self, vocal_audio_path: str, language: Optional[str] = None, vad: bool = False) -> Dict[str, Any]:
+        self._load_model()
+        audio = self._resolve_audio(vocal_audio_path)
 
-        # stable-ts transcribe dengan word timestamps presisi
         result = self._model.transcribe(
-            str(audio_file.resolve()),
-            language=language,
+            str(audio),
+            language=normalize_language(language),
             vad=vad,
-            regroup=True  # Mengelompokkan kata ke kalimat natural
+            regroup=True,
         )
+        data = self._format_result(result)
 
-        structured_data = self._format_result_to_json(result)
+        lrc_path = self.output_dir / f"{audio.stem}.lrc"
+        json_path = self.output_dir / f"{audio.stem}.json"
+        self.save_lrc(data, lrc_path)
+        self.save_json(data, json_path)
+        data["files"] = {"lrc": str(lrc_path.resolve()), "json": str(json_path.resolve())}
+        return data
 
-        # Simpan file LRC dan JSON secara otomatis
-        stem_name = audio_file.stem
-        lrc_path = self.output_dir / f"{stem_name}.lrc"
-        json_path = self.output_dir / f"{stem_name}.json"
+    def align_existing_lyrics(self, vocal_audio_path: str, lyrics_text: str, language: Optional[str] = None) -> Dict[str, Any]:
+        self._load_model()
+        audio = self._resolve_audio(vocal_audio_path)
 
-        self.save_lrc(structured_data, str(lrc_path))
-        self.save_json(structured_data, str(json_path))
+        lang = normalize_language(language) or self._detect_language(audio)
+        result = self._model.align(str(audio), lyrics_text, language=lang, original_split=True)
 
-        structured_data["files"] = {
-            "lrc": str(lrc_path.resolve()),
-            "json": str(json_path.resolve())
-        }
+        data = self._format_result(result)
+        data["language"] = lang
+        return data
 
-        print(f"[LyricsEngine] Lirik berhasil diproses.")
-        print(f" -> LRC : {lrc_path}")
-        print(f" -> JSON: {json_path}")
-
-        return structured_data
-
-    def align_existing_lyrics(
-        self,
-        vocal_audio_path: str,
-        lyrics_text: str,
-        language: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Jika Anda sudah memiliki lirik teks resmi lagu, fungsi ini melakukan
-        'Forced Alignment' agar lirik teks tersebut mendapatkan timestamp presisi
-        dari audio lagu.
-        """
-        self._init_model()
-
-        print(f"[LyricsEngine] Menyelaraskan teks lirik yang ada dengan audio...")
-        result = self._model.align(
-            self._model,
-            str(Path(vocal_audio_path).resolve()),
-            lyrics_text,
-            language=language
-        )
-
-        structured_data = self._format_result_to_json(result)
-        return structured_data
-
-    def _format_result_to_json(self, result) -> Dict[str, Any]:
-        """
-        Mengonversi output stable-ts menjadi struktur data bersih
-        yang siap dikonsumsi oleh Web Audio Karaoke Player frontend.
-        """
+    @staticmethod
+    def _format_result(result) -> Dict[str, Any]:
         lines = []
-        full_text_list = []
-
         for segment in result.segments:
-            line_text = segment.text.strip()
-            full_text_list.append(line_text)
-
-            words_data = []
-            if hasattr(segment, "words") and segment.words:
-                for w in segment.words:
-                    words_data.append({
-                        "word": w.word.strip(),
-                        "start": round(w.start, 2),
-                        "end": round(w.end, 2),
-                        "probability": round(getattr(w, "probability", 1.0), 3)
-                    })
-
+            text = segment.text.strip()
+            words = [
+                {
+                    "word": w.word.strip(),
+                    "start": round(w.start, 2),
+                    "end": round(w.end, 2),
+                    "probability": round(getattr(w, "probability", 1.0), 3),
+                }
+                for w in getattr(segment, "words", None) or []
+            ]
             lines.append({
                 "id": segment.id,
                 "start": round(segment.start, 2),
                 "end": round(segment.end, 2),
-                "text": line_text,
-                "words": words_data
+                "text": text,
+                "words": words,
             })
 
         return {
             "language": getattr(result, "language", "unknown"),
-            "full_lyrics": "\n".join(full_text_list),
-            "lines": lines
+            "full_lyrics": "\n".join(line["text"] for line in lines),
+            "lines": lines,
         }
 
-    def save_lrc(self, data: Dict[str, Any], output_path: str):
-        """Menyimpan lirik ke format standar LRC karaoke ([mm:ss.xx])."""
-        lrc_lines = []
-        for line in data.get("lines", []):
-            start = line["start"]
-            minutes = int(start // 60)
-            seconds = start % 60
-            timestamp = f"[{minutes:02d}:{seconds:05.2f}]"
-            lrc_lines.append(f"{timestamp}{line['text']}")
+    @staticmethod
+    def save_lrc(data: Dict[str, Any], output_path: Path) -> None:
+        rows = [f"[{int(l['start'] // 60):02d}:{l['start'] % 60:05.2f}]{l['text']}" for l in data["lines"]]
+        Path(output_path).write_text("\n".join(rows), encoding="utf-8")
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lrc_lines))
-
-    def save_json(self, data: Dict[str, Any], output_path: str):
-        """Menyimpan lirik dan word-level timing ke format JSON."""
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-# --- Template Pengujian / CLI Standalone ---
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Lyrics Generation & Alignment Engine (Whisper)")
-    parser.add_argument("input_audio", help="Path file audio vokal (mp3/wav)")
-    parser.add_argument("--model", default="base", choices=["tiny", "base", "small", "medium", "large-v3"],
-                        help="Ukuran model Whisper")
-    parser.add_argument("--lang", default=None, help="Kode bahasa (e.g. id, en, ja)")
-    parser.add_argument("--output_dir", default="./output/lyrics", help="Folder output")
-
-    args = parser.parse_args()
-
-    engine = LyricsEngine(model_size=args.model, output_dir=args.output_dir)
-    res = engine.transcribe_and_sync(args.input_audio, language=args.lang)
-
-    print("\n=== PREVIEW 3 BARIS PERTAMA LIRIK & TIMING ===")
-    for line in res["lines"][:3]:
-        print(f"[{line['start']}s -> {line['end']}s] {line['text']}")
-        for w in line["words"]:
-            print(f"   -> '{w['word']}' ({w['start']}s - {w['end']}s)")
-
+    @staticmethod
+    def save_json(data: Dict[str, Any], output_path: Path) -> None:
+        Path(output_path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

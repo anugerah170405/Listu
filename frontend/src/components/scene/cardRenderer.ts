@@ -19,18 +19,15 @@ export function drawCard(
     const k = w / 320
     ctx.save()
 
-    // 1. Standard rounded rectangle clipping
     ctx.beginPath()
     ctx.roundRect(0, 0, w, h, w * 0.085)
     ctx.clip()
 
-    // 2. Base background & cover image
     ctx.fillStyle = '#202022'
     ctx.fillRect(0, 0, w, h)
     if (img?.complete && img.naturalWidth) {
         drawCover(ctx, img, w, h)
     } else {
-        // Subtle vinyl disc placeholder when no cover image is provided
         ctx.save()
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
         const r = Math.min(w, h) * 0.28
@@ -44,7 +41,6 @@ export function drawCard(
         ctx.restore()
     }
 
-    // 3. Info text overlay
     if (showInfo) {
         const infoGrad = ctx.createLinearGradient(0, h * 0.55, 0, h)
         infoGrad.addColorStop(0, 'rgba(0,0,0,0)')
@@ -69,18 +65,15 @@ export function drawCard(
         ctx.letterSpacing = '0px'
     }
 
-    // 4. Hover state overlay
     if (hovered) {
         ctx.fillStyle = 'rgba(0,0,0,0.2)'
         ctx.fillRect(0, 0, w, h)
 
-        // Play button circle
         ctx.fillStyle = 'rgba(255,255,255,0.95)'
         ctx.beginPath()
         ctx.arc(w / 2, h / 2, 31 * k, 0, Math.PI * 2)
         ctx.fill()
 
-        // Play button icon
         ctx.fillStyle = '#111'
         ctx.beginPath()
         ctx.moveTo(w / 2 - 5 * k, h / 2 - 11 * k)
@@ -89,7 +82,6 @@ export function drawCard(
         ctx.closePath()
         ctx.fill()
 
-        // 3-dot menu button
         ctx.fillStyle = 'rgba(0,0,0,0.38)'
         ctx.beginPath()
         ctx.arc(w - 28 * k, 28 * k, 15 * k, 0, Math.PI * 2)

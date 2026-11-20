@@ -5,5 +5,8 @@ __pycache__/
 venv/
 env/
 .env
+serviceAccountKey.json
+*.json
+!requirements*.json
 .pytest_cache/
 .DS_Store

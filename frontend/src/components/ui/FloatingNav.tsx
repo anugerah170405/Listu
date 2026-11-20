@@ -32,9 +32,9 @@ function Thumb({ card }: { card: Card }) {
 }
 
 const ACCOUNT_ITEMS = [
-    { label: 'Akun', Icon: UserIcon },
-    { label: 'Syarat dan Ketentuan', Icon: DocumentIcon },
-    { label: 'Keluar', Icon: LogoutIcon },
+    { label: 'Account', Icon: UserIcon },
+    { label: 'Terms & Conditions', Icon: DocumentIcon },
+    { label: 'Log Out', Icon: LogoutIcon },
 ]
 
 type Mode = 'none' | 'search' | 'account'
@@ -52,43 +52,43 @@ export default function FloatingNav({
 }) {
     const [mode, setMode] = useState<Mode>('none')
     const [content, setContent] = useState<Exclude<Mode, 'none'>>('search')
-    const [q, setQ] = useState('')
+    const [searchQuery, setSearchQuery] = useState('')
     const [fullscreen, setFullscreen] = useState(false)
-    const wrap = useRef<HTMLDivElement>(null)
-    const file = useRef<HTMLInputElement>(null)
-    const search = useRef<HTMLInputElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const searchInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
-        const on = () => setFullscreen(Boolean(document.fullscreenElement))
-        document.addEventListener('fullscreenchange', on)
-        return () => document.removeEventListener('fullscreenchange', on)
+        const handleFullscreenChange = () => setFullscreen(Boolean(document.fullscreenElement))
+        document.addEventListener('fullscreenchange', handleFullscreenChange)
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }, [])
 
     const toggleFullscreen = () => {
         const req = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
-        req.catch(() => {})
+        req.catch(() => { })
     }
 
-    const open = (m: Exclude<Mode, 'none'>) => {
-        if (mode === m) return setMode('none')
-        setContent(m)
-        setMode(m)
-        if (m === 'search') setTimeout(() => search.current?.focus(), 120)
+    const handleToggleMode = (targetMode: Exclude<Mode, 'none'>) => {
+        if (mode === targetMode) return setMode('none')
+        setContent(targetMode)
+        setMode(targetMode)
+        if (targetMode === 'search') setTimeout(() => searchInputRef.current?.focus(), 120)
     }
 
     useEffect(() => {
         if (mode === 'none') return
-        const down = (e: PointerEvent) => !wrap.current?.contains(e.target as Node) && setMode('none')
-        const key = (e: KeyboardEvent) => e.key === 'Escape' && setMode('none')
-        window.addEventListener('pointerdown', down)
-        window.addEventListener('keydown', key)
+        const handleClickOutside = (e: PointerEvent) => !containerRef.current?.contains(e.target as Node) && setMode('none')
+        const handleKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && setMode('none')
+        window.addEventListener('pointerdown', handleClickOutside)
+        window.addEventListener('keydown', handleKeyDown)
         return () => {
-            window.removeEventListener('pointerdown', down)
-            window.removeEventListener('keydown', key)
+            window.removeEventListener('pointerdown', handleClickOutside)
+            window.removeEventListener('keydown', handleKeyDown)
         }
     }, [mode])
 
-    const term = q.trim().toLowerCase()
+    const term = searchQuery.trim().toLowerCase()
     const results = term ? cards.filter((c) => `${c.title} ${c.artist}`.toLowerCase().includes(term)) : cards
     const expanded = mode !== 'none'
     const width = player
@@ -101,11 +101,11 @@ export default function FloatingNav({
 
     return (
         <div className="pointer-events-none fixed inset-x-0 bottom-8 z-30 flex justify-center px-3">
-            <div ref={wrap} className="pointer-events-auto flex flex-col items-center">
+            <div ref={containerRef} className="pointer-events-auto flex flex-col items-center">
                 <input
-                    ref={file}
+                    ref={fileInputRef}
                     type="file"
-                    accept="audio/*,image/*"
+                    accept="audio/*"
                     multiple
                     hidden
                     onChange={(e) => {
@@ -123,15 +123,15 @@ export default function FloatingNav({
                                     <div className="flex items-center gap-2.5 rounded-full bg-white/8 px-3.5 py-2.5">
                                         <SearchIcon width={18} height={18} className="shrink-0 text-white/55" />
                                         <input
-                                            ref={search}
-                                            value={q}
-                                            onChange={(e) => setQ(e.target.value)}
+                                            ref={searchInputRef}
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Search songs or artists"
-                                            className="w-full bg-transparent text-[15px] outline-none placeholder:text-white/40"
+                                            className="w-full bg-transparent text-sm outline-none placeholder:text-white/40"
                                         />
                                     </div>
                                     <ul className="mt-1 h-44 overflow-y-auto py-1">
-                                        {!results.length && <li className="grid h-full place-items-center text-[13px] text-white/40">Tidak ada hasil</li>}
+                                        {!results.length && <li className="grid h-full place-items-center text-xs text-white/40">No results found</li>}
                                         {results.map((c) => (
                                             <li key={c.id}>
                                                 <button
@@ -140,10 +140,10 @@ export default function FloatingNav({
                                                 >
                                                     <Thumb card={c} />
                                                     <span className="min-w-0 flex-1">
-                                                        <span className="block truncate text-[13px] font-medium">{c.title}</span>
-                                                        <span className="block truncate text-[12px] text-white/50">{c.artist}</span>
+                                                        <span className="block truncate text-sm font-medium">{c.title}</span>
+                                                        <span className="block truncate text-xs text-white/50">{c.artist}</span>
                                                     </span>
-                                                    <span className="text-[12px] text-white/40 tabular-nums">{c.duration}</span>
+                                                    <span className="text-xs text-white/40 tabular-nums">{c.duration}</span>
                                                 </button>
                                             </li>
                                         ))}
@@ -156,7 +156,7 @@ export default function FloatingNav({
                                             <li key={label}>
                                                 <button
                                                     onClick={() => setMode('none')}
-                                                    className={`flex w-full items-center gap-4 rounded-full px-3.5 py-2.5 text-[13px] transition-colors hover:bg-white/10 cursor-pointer ${label === 'Keluar' ? 'text-[#ff7a57]' : 'text-white/90'}`}
+                                                    className={`flex w-full items-center gap-4 rounded-full px-3.5 py-2.5 text-sm transition-colors hover:bg-white/10 cursor-pointer ${label === 'Log Out' ? 'text-[#ff7a57]' : 'text-white/90'}`}
                                                 >
                                                     <Icon width={20} height={20} />
                                                     <span className="flex-1 text-left">{label}</span>
@@ -172,10 +172,10 @@ export default function FloatingNav({
                     {player && !expanded && <ProgressLine time={player.time} duration={player.duration} onSeek={player.onSeek} />}
 
                     <nav className={`flex animate-[fade-in_0.35s_ease-out] items-center justify-center gap-1 p-1.5 ${player ? 'pt-2' : ''}`}>
-                        <NavButton label="Add New" hideTip={expanded} onClick={() => { setMode('none'); file.current?.click() }}>
+                        <NavButton label="Add New" hideTip={expanded} onClick={() => { setMode('none'); fileInputRef.current?.click() }}>
                             <PlusIcon />
                         </NavButton>
-                        <NavButton label="Search" hideTip={expanded} active={mode === 'search'} onClick={() => open('search')}>
+                        <NavButton label="Search" hideTip={expanded} active={mode === 'search'} onClick={() => handleToggleMode('search')}>
                             <SearchIcon />
                         </NavButton>
 
@@ -200,7 +200,7 @@ export default function FloatingNav({
                             </>
                         )}
 
-                        <NavButton label="Account" hideTip={expanded} active={mode === 'account'} onClick={() => open('account')}>
+                        <NavButton label="Account" hideTip={expanded} active={mode === 'account'} onClick={() => handleToggleMode('account')}>
                             <UserIcon />
                         </NavButton>
 

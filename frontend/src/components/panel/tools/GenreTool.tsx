@@ -1,4 +1,6 @@
 import type { Card } from '../../../types'
+import Button from '../../ui/Button'
+import { showSnackbar } from '../../../utils/snackbar'
 
 type GenreToolProps = {
     card: Card
@@ -6,19 +8,26 @@ type GenreToolProps = {
 }
 
 const GENRES = ['Ambient', 'Electronic', 'Jazz', 'Hip-hop', 'Classical', 'Soul', 'Pop', 'Rock']
-const btn = 'rounded-full px-4 py-2 text-[12px] font-medium transition-colors cursor-pointer'
 
 export default function GenreTool({ card, onUpdate }: GenreToolProps) {
+    const handleToggle = (g: string) => {
+        const next = card.genre === g ? undefined : g
+        onUpdate({ genre: next })
+        showSnackbar(next ? `Genre set to ${next}` : 'Genre removed', 'success')
+    }
+
     return (
         <div className="flex flex-wrap gap-2">
             {GENRES.map((g) => (
-                <button
+                <Button
                     key={g}
-                    onClick={() => onUpdate({ genre: card.genre === g ? undefined : g })}
-                    className={`${btn} border ${card.genre === g ? 'border-white bg-white text-neutral-900' : 'border-white/15 text-white/75 hover:border-white/40'}`}
+                    variant="chip"
+                    size="md"
+                    selected={card.genre === g}
+                    onClick={() => handleToggle(g)}
                 >
                     {g}
-                </button>
+                </Button>
             ))}
         </div>
     )
