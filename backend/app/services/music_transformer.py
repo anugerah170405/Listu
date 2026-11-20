@@ -1,9 +1,11 @@
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import numpy as np
 import soundfile as sf
+
+from app.core.config import TRANSFORMED_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +15,8 @@ def apply_per_channel(fn: Callable[[np.ndarray], np.ndarray], y: np.ndarray) -> 
 
 
 class MusicTransformerEngine:
-    def __init__(self, output_dir: str = "./output/transformed"):
-        self.output_dir = Path(output_dir)
+    def __init__(self, output_dir: Optional[Union[str, Path]] = None):
+        self.output_dir = Path(output_dir) if output_dir else TRANSFORMED_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._musicgen_model = None
         self._musicgen_processor = None

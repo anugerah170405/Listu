@@ -2,14 +2,16 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
+
+from app.core.config import EXPORTS_DIR
 
 logger = logging.getLogger(__name__)
 
 
 class AudioExporterEngine:
-    def __init__(self, ffmpeg_path: Optional[str] = None, output_dir: str = "./output/exports"):
-        self.output_dir = Path(output_dir)
+    def __init__(self, ffmpeg_path: Optional[str] = None, output_dir: Optional[Union[str, Path]] = None):
+        self.output_dir = Path(output_dir) if output_dir else EXPORTS_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.ffmpeg_bin = ffmpeg_path or shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
         if not Path(self.ffmpeg_bin).exists() and not shutil.which("ffmpeg"):

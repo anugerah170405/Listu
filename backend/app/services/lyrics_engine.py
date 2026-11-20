@@ -1,7 +1,9 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
+
+from app.core.config import LYRICS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +17,14 @@ def normalize_language(language: Optional[str]) -> Optional[str]:
 
 
 class LyricsEngine:
-    def __init__(self, model_size: str = "small", device: Optional[str] = None, output_dir: str = "./output/lyrics"):
+    def __init__(
+        self,
+        model_size: str = "small",
+        device: Optional[str] = None,
+        output_dir: Optional[Union[str, Path]] = None,
+    ):
         self.model_size = model_size
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir) if output_dir else LYRICS_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.device = device or self._detect_device()
         self._model = None

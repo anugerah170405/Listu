@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
+
+from app.core.config import SEPARATED_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -11,12 +13,12 @@ class VocalSeparatorEngine:
     def __init__(
         self,
         model_name: str = DEFAULT_BS_ROFORMER,
-        output_dir: str = "./output/separated",
+        output_dir: Optional[Union[str, Path]] = None,
         output_format: str = "WAV",
         log_level: int = 20,
     ):
         self.model_name = model_name
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir) if output_dir else SEPARATED_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.output_format = output_format.upper()
         self.log_level = log_level
