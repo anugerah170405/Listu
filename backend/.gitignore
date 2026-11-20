@@ -10,3 +10,4 @@ serviceAccountKey.json
 !requirements*.json
 .pytest_cache/
 .DS_Store
+output/
