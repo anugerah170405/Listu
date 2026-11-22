@@ -1,53 +1,123 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useMatch, useSearchParams } from 'react-router-dom'
-import { SlidersIcon } from 'lucide-react'
+import { SlidersIcon, MusicIcon, UserIcon } from 'lucide-react'
 import { usePlayback } from './hooks/usePlayback'
+import { useTaskSync } from './hooks/useTaskSync'
 import { type Stem, type Card } from './types'
+import { useAuth } from './context/AuthContext'
 import CardMenu from './components/ui/CardMenu'
 import FloatingNav from './components/ui/FloatingNav'
 import StudioPanel from './components/panel/StudioPanel'
 import LiquidScene from './components/scene/LiquidScene'
-import { fetchTracks, createTrack, deleteTrack, updateTrackMetadata, trackToCard } from './services/api'
+import { fetchTracks, createTrack, deleteTrack, updateTrackMetadata, trackToCard, type UpdateTrackPayload } from './services/api'
 import TopSnackbar from './components/ui/TopSnackbar'
 import EmptyState from './components/ui/EmptyState'
-import type { SnackbarData } from './utils/snackbar'
+import { showSnackbar, hideSnackbar } from './utils/snackbar'
 import { getAudioDuration } from './utils/audio'
 import { findActiveLine, isValidTime } from './utils/lyrics'
 
-const STEM_SOURCE = { vocal: 'vocalsAudio', instrumental: 'instrumentalAudio' } as const
+const STEM_SOURCE = {
+  vocal: 'vocalsAudio',
+  instrumental: 'instrumentalAudio',
+} as const
+
+const CARDS_CACHE_KEY = 'listu:cards_cache'
+
+function readCachedCards(): Card[] {
+  try {
+    const raw = localStorage.getItem(CARDS_CACHE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch (err) {
+    console.debug('Failed to read cached cards:', err)
+    return []
+  }
+}
+
+function writeCachedCards(cards: Card[]) {
+  try {
+    localStorage.setItem(CARDS_CACHE_KEY, JSON.stringify(cards))
+  } catch (err) {
+    console.debug('Failed to cache cards:', err)
+  }
+}
+
+function clearCachedCards() {
+  try {
+    localStorage.removeItem(CARDS_CACHE_KEY)
+  } catch (err) {
+    console.debug('Failed to clear cached cards:', err)
+  }
+}
 
 export default function App() {
   const navigate = useNavigate()
+  const { user, profile, loading: authLoading } = useAuth()
   const match = useMatch('/track/:trackId')
   const playId = match?.params.trackId ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const studio = searchParams.get('studio') === 'true'
-  const [snackbar, setSnackbar] = useState<SnackbarData | null>({ message: 'Loading data', type: 'loading' })
-  const [cards, setCards] = useState<Card[]>([])
-  const [loading, setLoading] = useState(true)
+  const [cards, setCards] = useState<Card[]>(readCachedCards)
+  const [loadedUid, setLoadedUid] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const [menu, setMenu] = useState<{ card: Card; x: number; y: number } | null>(null)
   const [stem, setStem] = useState<Stem>('full')
 
+  const isAuthenticated = Boolean(user || profile)
+  const loading = Boolean(user && loadedUid !== user.uid)
+  const isInitializing = authLoading || loading
   const current = cards.find((c) => c.id === playId)
   const index = current ? cards.indexOf(current) : -1
 
-  useEffect(() => {
-    fetchTracks()
-      .then((tracks) => {
-        setCards(tracks.map(trackToCard))
-        setSnackbar(null)
-      })
-      .catch((err) => {
-        console.warn(err.message, err)
-        setSnackbar({ message: err.message, type: 'error' })
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  useTaskSync({
+    cards,
+    setCards,
+    enabled: Boolean(user && !authLoading),
+  })
 
   useEffect(() => {
-    if (!loading && playId && !current) navigate('/', { replace: true })
-  }, [loading, playId, current, navigate])
+    if (authLoading) return
+
+    if (!user) {
+      setCards([])
+      setLoadedUid(null)
+      clearCachedCards()
+      hideSnackbar()
+      return
+    }
+
+    let cancelled = false
+    showSnackbar('Loading data', 'loading')
+    fetchTracks()
+      .then((tracks) => {
+        if (cancelled) return
+        const freshCards = tracks.map(trackToCard)
+        setCards(freshCards)
+        writeCachedCards(freshCards)
+        hideSnackbar()
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.warn(err.message, err)
+        showSnackbar(err.message, 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedUid(user.uid)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, authLoading])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      writeCachedCards(cards)
+    }
+  }, [cards, isAuthenticated])
+
+  useEffect(() => {
+    if (!isInitializing && playId && !current) navigate('/', { replace: true })
+  }, [isInitializing, playId, current, navigate])
 
   useEffect(() => {
     if (!current) return
@@ -81,17 +151,25 @@ export default function App() {
 
   const prev = () => (time > 3 ? seek(0) : step(-1))
 
+  const METADATA_KEYS: (keyof Card)[] = ['title', 'artist', 'src', 'genre', 'lyrics', 'lyricTimes', 'language']
+
   const updateCard = (id: string, patch: Partial<Card>) => {
     setCards((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)))
-    updateTrackMetadata(id, {
-      title: patch.title,
-      artist: patch.artist,
-      cover_url: patch.src,
-      genre: patch.genre,
-      lyrics_lines: patch.lyrics,
-      lyrics_times: patch.lyricTimes,
-      lyrics_language: patch.language,
-    }).catch((err) => console.warn('Failed to sync update to server:', err))
+    if (!METADATA_KEYS.some((key) => key in patch)) return
+
+    const payload: UpdateTrackPayload = {}
+    if ('title' in patch) payload.title = patch.title
+    if ('artist' in patch) payload.artist = patch.artist
+    if ('src' in patch) payload.cover_url = patch.src ?? null
+    if ('genre' in patch) payload.genre = patch.genre ?? null
+    if ('lyrics' in patch) payload.lyrics_lines = patch.lyrics
+    if ('lyricTimes' in patch) payload.lyrics_times = patch.lyricTimes
+    if ('language' in patch) payload.lyrics_language = patch.language ?? null
+
+    updateTrackMetadata(id, payload).catch((err) => {
+      console.warn('Failed to sync update to server:', err)
+      showSnackbar('Failed to sync changes to server', 'error')
+    })
   }
 
   const setStudioOpen = (open: boolean) =>
@@ -112,13 +190,18 @@ export default function App() {
   }
 
   const addFiles = async (files: File[]) => {
+    if (!user) {
+      showSnackbar('Please sign in with Google to upload tracks', 'error')
+      return
+    }
+
     const audios = files.filter((f) => f.type.startsWith('audio/'))
     if (audios.length < files.length) {
-      setSnackbar({ message: 'Only audio files can be uploaded', type: 'error' })
+      showSnackbar('Only audio files can be uploaded', 'error')
       if (!audios.length) return
     }
 
-    setSnackbar({ message: 'Saving track to Firebase...', type: 'loading' })
+    showSnackbar('Uploading track...', 'loading')
 
     for (const file of audios) {
       try {
@@ -129,11 +212,11 @@ export default function App() {
           duration: await getAudioDuration(file),
           audioFile: file,
         })
-        setSnackbar({ message: 'Track saved to Firebase!', type: 'success' })
+        showSnackbar('Track uploaded successfully!', 'success')
         setCards((list) => [{ ...trackToCard(saved), audioFile: file }, ...list])
       } catch (err) {
-        console.error('Failed to save track:', err)
-        setSnackbar({ message: 'Failed to save track to Firebase', type: 'error' })
+        console.error('Failed to upload track:', err)
+        showSnackbar(err, 'error')
       }
     }
   }
@@ -143,18 +226,18 @@ export default function App() {
       setPlaying(false)
       navigate('/')
     }
-    setCards((list) => list.filter((c) => c.id !== id))
+    const nextCards = cards.filter((c) => c.id !== id)
+    setCards(nextCards)
+    writeCachedCards(nextCards)
     setMenu(null)
     try {
       await deleteTrack(id)
-      setSnackbar({ message: 'Track and files deleted successfully', type: 'success' })
+      showSnackbar('Track and files deleted successfully', 'success')
     } catch (err) {
       console.error('Failed to delete track:', err)
-      setSnackbar({ message: 'Failed to delete track from server', type: 'error' })
+      showSnackbar('Failed to delete track from server', 'error')
     }
   }
-
-  const handleCloseSnackbar = useCallback(() => setSnackbar(null), [])
 
   const seekLine = (i: number) => {
     const t = current?.lyricTimes?.[i]
@@ -163,10 +246,18 @@ export default function App() {
 
   return (
     <main className="relative h-screen w-full overflow-hidden bg-white text-neutral-900">
-      <TopSnackbar snackbar={snackbar} onClose={handleCloseSnackbar} />
+      <TopSnackbar />
 
-      {!loading && cards.length === 0 && (
-        <EmptyState title="No tracks yet" description="Add a new track by clicking the + button below" />
+      {cards.length === 0 && (!isInitializing || Boolean(profile)) && (
+        <EmptyState
+          icon={isAuthenticated ? MusicIcon : UserIcon}
+          title={isAuthenticated ? 'No tracks yet' : 'Sign in to Listu'}
+          description={
+            isAuthenticated
+              ? 'Add a new track by clicking the + button below'
+              : 'Sign in with Google from the bottom bar (Account) to view and manage your tracks.'
+          }
+        />
       )}
 
       <LiquidScene
@@ -222,11 +313,16 @@ export default function App() {
       {current && studio && (
         <StudioPanel
           card={current}
+          cards={cards}
           time={time}
           playing={playing}
           stem={stem}
           onStem={setStem}
-          onUpdate={(patch) => updateCard(current.id, patch)}
+          onUpdate={(patch, targetId) => updateCard(targetId ?? current.id, patch)}
+          onCreatedTrack={(newCard) => {
+            setCards((list) => [newCard, ...list])
+          }}
+          onDeleteTrack={(targetId) => removeCard(targetId ?? current.id)}
           onSeek={seek}
           onTogglePlay={togglePlay}
           onClose={() => setStudioOpen(false)}

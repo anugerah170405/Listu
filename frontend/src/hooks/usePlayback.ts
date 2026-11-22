@@ -1,25 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Card } from '../types'
-
-const DEFAULT_DURATION = 180
-
-export function parseDuration(duration?: string): number {
-  const parts = (duration ?? '').split(':').map(Number)
-  const valid = parts.length === 2 && parts.every((n) => !isNaN(n))
-  return valid ? parts[0] * 60 + parts[1] : DEFAULT_DURATION
-}
+import { parseDuration } from '../utils/format'
 
 export function usePlayback(card: Card | undefined, playing: boolean, onEnded: () => void) {
   const [time, setTime] = useState(0)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
   const [prevCardId, setPrevCardId] = useState(card?.id)
   const lastTimeRef = useRef(0)
+  const playingRef = useRef(playing)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const onEndedRef = useRef(onEnded)
 
   useEffect(() => {
     lastTimeRef.current = time
   }, [time])
+
+  useEffect(() => {
+    playingRef.current = playing
+  }, [playing])
 
   useEffect(() => {
     onEndedRef.current = onEnded
@@ -32,34 +30,36 @@ export function usePlayback(card: Card | undefined, playing: boolean, onEnded: (
   }
 
   const duration = audioDuration ?? parseDuration(card?.duration)
+  const cardId = card?.id
+  const cardAudio = card?.audio
 
   useEffect(() => {
-    if (!card) return
+    if (!cardId || !cardAudio) return
 
-    if (card.audio) {
-      const audio = new Audio(card.audio)
-      audioRef.current = audio
-      if (lastTimeRef.current > 0) audio.currentTime = lastTimeRef.current
+    const audio = new Audio(cardAudio)
+    audioRef.current = audio
+    if (lastTimeRef.current > 0) audio.currentTime = lastTimeRef.current
 
-      const onMetadata = () => isFinite(audio.duration) && setAudioDuration(audio.duration)
-      const onTimeUpdate = () => setTime(audio.currentTime)
-      const onAudioEnded = () => onEndedRef.current()
+    const onMetadata = () => isFinite(audio.duration) && setAudioDuration(audio.duration)
+    const onTimeUpdate = () => setTime(audio.currentTime)
+    const onAudioEnded = () => onEndedRef.current()
 
-      audio.addEventListener('loadedmetadata', onMetadata)
-      audio.addEventListener('timeupdate', onTimeUpdate)
-      audio.addEventListener('ended', onAudioEnded)
-      if (playing) audio.play().catch(() => {})
+    audio.addEventListener('loadedmetadata', onMetadata)
+    audio.addEventListener('timeupdate', onTimeUpdate)
+    audio.addEventListener('ended', onAudioEnded)
+    if (playingRef.current) audio.play().catch(() => {})
 
-      return () => {
-        audio.removeEventListener('loadedmetadata', onMetadata)
-        audio.removeEventListener('timeupdate', onTimeUpdate)
-        audio.removeEventListener('ended', onAudioEnded)
-        audio.pause()
-        audioRef.current = null
-      }
+    return () => {
+      audio.removeEventListener('loadedmetadata', onMetadata)
+      audio.removeEventListener('timeupdate', onTimeUpdate)
+      audio.removeEventListener('ended', onAudioEnded)
+      audio.pause()
+      audioRef.current = null
     }
+  }, [cardId, cardAudio])
 
-    if (!playing) return
+  useEffect(() => {
+    if (!cardId || cardAudio || !playing) return
 
     let rafId = 0
     let last = performance.now()
@@ -78,14 +78,14 @@ export function usePlayback(card: Card | undefined, playing: boolean, onEnded: (
     }
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [card?.id, card?.audio])
+  }, [cardId, cardAudio, playing, duration])
 
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio || !card?.audio) return
+    if (!audio || !cardAudio) return
     if (playing) audio.play().catch(() => {})
     else audio.pause()
-  }, [playing, card?.audio])
+  }, [playing, cardAudio])
 
   const seek = useCallback(
     (target: number) => {

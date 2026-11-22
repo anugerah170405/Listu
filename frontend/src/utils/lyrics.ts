@@ -12,12 +12,17 @@ export function parseLyrics(text: string): { lines: string[]; times?: number[] }
   return { lines, times: times as number[] }
 }
 
-export function findActiveLine(times: (number | undefined)[] | undefined, lineCount: number, now: number): number {
+export function findActiveLine(times: (number | null | undefined)[] | undefined, lineCount: number, now: number): number {
   let active = -1
   if (!times?.length) return active
+  // Pick the line with the latest start time <= now (stable even if timestamps are not sorted by index)
+  let best = -Infinity
   for (let i = 0; i < lineCount; i++) {
     const t = times[i]
-    if (isValidTime(t) && now >= t) active = i
+    if (isValidTime(t) && now >= t && t >= best) {
+      best = t
+      active = i
+    }
   }
   return active
 }

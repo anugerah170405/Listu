@@ -1,9 +1,16 @@
 import type { Card } from '../../types'
 
-export function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, w: number, h: number) {
-    const iw = img.naturalWidth, ih = img.naturalHeight, r = w / h
-    const [sw, sh] = iw / ih > r ? [ih * r, ih] : [iw, iw / r]
-    const [sx, sy] = iw / ih > r ? [(iw - sw) / 2, 0] : [0, (ih - sh) * 0.3]
+export type CoverSource = HTMLImageElement | HTMLCanvasElement
+
+export function drawCover(ctx: CanvasRenderingContext2D, img: CoverSource, w: number, h: number) {
+    const iw = img instanceof HTMLImageElement ? img.naturalWidth : img.width
+    const ih = img instanceof HTMLImageElement ? img.naturalHeight : img.height
+    if (!iw || !ih) return
+
+    const r = w / h
+    const ir = iw / ih
+    const [sw, sh] = ir > r ? [ih * r, ih] : [iw, iw / r]
+    const [sx, sy] = ir > r ? [(iw - sw) / 2, 0] : [0, (ih - sh) / 2]
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
 }
 
@@ -12,7 +19,7 @@ export function drawCard(
     card: Card,
     w: number,
     h: number,
-    img?: HTMLImageElement,
+    img?: CoverSource,
     hovered = false,
     showInfo = true,
 ) {
@@ -25,7 +32,8 @@ export function drawCard(
 
     ctx.fillStyle = '#202022'
     ctx.fillRect(0, 0, w, h)
-    if (img?.complete && img.naturalWidth) {
+    const ready = img instanceof HTMLImageElement ? img.complete && img.naturalWidth > 0 : Boolean(img && img.width > 0)
+    if (img && ready) {
         drawCover(ctx, img, w, h)
     } else {
         ctx.save()
@@ -53,12 +61,13 @@ export function drawCard(
         ctx.textAlign = 'left'
         ctx.fillStyle = '#fff'
         ctx.font = `600 ${17 * k}px "Inter Tight", "Inter", sans-serif`
-        ctx.fillText(card.title, 22 * k, h - 48 * k)
+        ctx.fillText(card.title.length > 32 ? card.title.slice(0, 30) + '...' : card.title, 22 * k, h - 48 * k)
 
         ctx.fillStyle = 'rgba(255,255,255,0.72)'
         ctx.font = `500 ${10 * k}px "Inter Tight", "Inter", sans-serif`
         ctx.letterSpacing = `${0.8 * k}px`
-        ctx.fillText(card.artist.toUpperCase(), 22 * k, h - 25 * k)
+        const artist = card.artist.toUpperCase()
+        ctx.fillText(artist.length > 20 ? artist.slice(0, 20) + '...' : artist, 22 * k, h - 25 * k)
 
         ctx.textAlign = 'right'
         ctx.fillText(card.duration, w - 22 * k, h - 25 * k)
@@ -97,4 +106,3 @@ export function drawCard(
 
     ctx.restore()
 }
-

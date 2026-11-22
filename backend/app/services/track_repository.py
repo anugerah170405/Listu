@@ -1,18 +1,28 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from google.api_core.exceptions import NotFound
+
 from app.core.firebase import db
-from app.schemas.track import TaskStatus, Track
+from app.schemas.track import Track
 
 COLLECTION_NAME = "tracks"
+logger = logging.getLogger(__name__)
 
 
 def _doc(track_id: str):
     return db.collection(COLLECTION_NAME).document(track_id)
 
 
-def _now() -> str:
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _doc_to_track(doc) -> Track:
+    data = doc.to_dict() or {}
+    data.setdefault("id", doc.id)
+    return Track.model_validate(data)
 
 
 def save_track(track: Track) -> Track:
@@ -22,41 +32,64 @@ def save_track(track: Track) -> Track:
 
 def get_track(track_id: str) -> Optional[Track]:
     doc = _doc(track_id).get()
-    return Track.model_validate(doc.to_dict()) if doc.exists else None
+    if not doc.exists:
+        return None
+    try:
+        return _doc_to_track(doc)
+    except Exception as exc:
+        logger.warning("Failed to validate track doc %s: %s", track_id, exc)
+        return None
 
 
-def get_all_tracks() -> List[Track]:
-    docs = db.collection(COLLECTION_NAME).order_by("created_at", direction="DESCENDING").stream()
+def get_all_tracks(user_id: Optional[str] = None) -> List[Track]:
+    if not user_id:
+        return []
+    # No order_by in the query: Firestore silently drops docs missing that field.
+    docs = db.collection(COLLECTION_NAME).where("user_id", "==", user_id).stream()
     tracks = []
     for doc in docs:
         try:
-            tracks.append(Track.model_validate(doc.to_dict()))
-        except Exception:
-            continue
+            tracks.append(_doc_to_track(doc))
+        except Exception as exc:
+            logger.warning("Skipping invalid track doc %s: %s", doc.id, exc)
+    tracks.sort(key=lambda t: t.created_at.timestamp(), reverse=True)
     return tracks
 
 
-def update_track_fields(track_id: str, fields: Dict[str, Any]) -> None:
-    _doc(track_id).update({**fields, "updated_at": _now()})
-
-
-def update_engine_task(
-    track_id: str,
-    engine_name: str,
-    status: TaskStatus,
-    error: Optional[str] = None,
-    progress: Optional[float] = None,
-) -> None:
-    prefix = f"tasks.{engine_name}"
-    fields: Dict[str, Any] = {
-        f"{prefix}.status": status.value,
-        f"{prefix}.error": error,
-        f"{prefix}.updated_at": _now(),
-    }
-    if progress is not None:
-        fields[f"{prefix}.progress"] = progress
-    update_track_fields(track_id, fields)
+def update_track_fields(track_id: str, fields: Dict[str, Any]) -> bool:
+    #Update specific fields on a track document. Returns False if the track no longer exists.
+    try:
+        _doc(track_id).update({**fields, "updated_at": now_iso()})
+        return True
+    except NotFound:
+        logger.warning("Track %s not found during update (may have been deleted)", track_id)
+        return False
 
 
 def delete_track(track_id: str) -> None:
     _doc(track_id).delete()
+
+
+def cleanup_stale_processing_tasks() -> int:
+    #Reset any task stuck in 'processing' state when backend server starts up.
+    count = 0
+    try:
+        docs = db.collection(COLLECTION_NAME).stream()
+        for doc in docs:
+            data = doc.to_dict() or {}
+            proc = data.get("processing")
+            if not isinstance(proc, dict):
+                continue
+            updates: Dict[str, Any] = {}
+            for task_name, task_data in proc.items():
+                if isinstance(task_data, dict) and task_data.get("status") == "processing":
+                    updates[f"processing.{task_name}.status"] = "failed"
+                    updates[f"processing.{task_name}.error"] = "Process interrupted (server restarted)"
+                    updates[f"processing.{task_name}.updated_at"] = now_iso()
+            if updates:
+                _doc(doc.id).update({**updates, "updated_at": now_iso()})
+                count += 1
+                logger.info("Reset stale processing task for track %s", doc.id)
+    except Exception as exc:
+        logger.warning("Failed to cleanup stale processing tasks: %s", exc)
+    return count

@@ -8,3 +8,16 @@ export function formatTime(seconds: number, withFraction = false): string {
   return `${String(m).padStart(2, '0')}:${secStr}`
 }
 
+export function parseDuration(duration?: string, defaultDuration = 180): number {
+  const parts = (duration ?? '').split(':').map(Number)
+  const valid = parts.length === 2 && parts.every((n) => !isNaN(n))
+  return valid ? parts[0] * 60 + parts[1] : defaultDuration
+}
+
+export function formatDate(iso?: string): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return isNaN(d.getTime())
+    ? '-'
+    : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}

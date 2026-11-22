@@ -40,6 +40,8 @@ class VocalSeparatorEngine:
             output_dir=str(self.output_dir),
             output_format=self.output_format,
             log_level=self.log_level,
+            use_autocast=True,
+            mdxc_params={"segment_size": 256, "batch_size": 1, "overlap": 3},
         )
         self._separator.load_model(model_filename=self.model_name)
 

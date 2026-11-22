@@ -47,11 +47,15 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
                     ref={ref}
                     id={inputId}
                     disabled={disabled}
-                    className={`w-full bg-white/[0.06] text-white placeholder:text-white/30 outline-none transition-all duration-200 hover:bg-white/[0.08] focus:bg-white/[0.12] disabled:opacity-40 ${
+                    className={`w-full bg-white/[0.06] text-white placeholder:text-white/30 outline-none transition-all duration-200 hover:bg-white/[0.08] focus:bg-white/[0.12] border border-transparent focus:border-white/20 focus:ring-2 focus:ring-white/15 disabled:opacity-40 ${
                         isSm ? 'rounded-xl px-3 py-2 text-xs' : 'rounded-2xl px-4 py-3 text-sm'
                     } ${leftIcon ? (isSm ? 'pl-8' : 'pl-10') : ''} ${
                         rightIcon ? (isSm ? 'pr-8' : 'pr-10') : ''
-                    } ${error ? 'bg-red-500/10 text-red-200 placeholder:text-red-300/40' : ''} ${className}`.trim()}
+                    } ${
+                        error
+                            ? '!border-red-500/50 bg-red-500/10 text-red-200 placeholder:text-red-300/40 focus:!border-red-400 focus:!ring-red-500/30'
+                            : ''
+                    } ${className}`.trim()}
                     {...props}
                 />
                 {rightIcon && (

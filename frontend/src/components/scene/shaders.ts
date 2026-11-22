@@ -26,6 +26,10 @@ vec2 warp(vec2 st, float s){
 void main(){
   vec2 st = vec2(vUv.x, 1.0 - vUv.y);
   float e = edge(st.y);
+  if (e < 0.0005) {
+    gl_FragColor = vec4(texture2D(uTex, st).rgb, 1.0);
+    return;
+  }
   float dirY = st.y < 0.5 ? 1.0 : -1.0;
   vec3 col = vec3(0.0);
   const int N = 9;
@@ -71,4 +75,3 @@ export function initWebGL(gl: WebGLRenderingContext) {
 
     return { tex, uTex: gl.getUniformLocation(prog, 'uTex') }
 }
-

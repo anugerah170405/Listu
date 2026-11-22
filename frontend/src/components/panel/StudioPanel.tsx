@@ -1,22 +1,25 @@
 import { useState, type ReactNode, type ComponentType } from 'react'
 import type { Card, Stem } from '../../types'
-import { ChevronDownIcon, ClockIcon, XIcon as CloseIcon, PenIcon, SplitIcon, TagIcon, InfoIcon } from 'lucide-react'
+import { ChevronDownIcon, XIcon as CloseIcon, PenIcon, SplitIcon, TagIcon, InfoIcon, Trash2Icon } from 'lucide-react'
 import IconButton from '../ui/IconButton'
 import TrackInfo from './tools/TrackInfo'
 import StemTool from './tools/StemTool'
 import GenreTool from './tools/GenreTool'
-import WriteTool from './tools/WriteTool'
-import SyncTool from './tools/SyncTool'
+import LyricsTool from './tools/LyricsTool'
+import DeleteTool from './tools/DeleteTool'
 
-type ToolId = 'info' | 'stem' | 'genre' | 'write' | 'sync'
+type ToolId = 'info' | 'stem' | 'genre' | 'lyrics' | 'delete'
 
 type Props = {
     card: Card
+    cards?: Card[]
     time: number
     playing: boolean
     stem: Stem
     onStem: (s: Stem) => void
-    onUpdate: (patch: Partial<Card>) => void
+    onUpdate: (patch: Partial<Card>, targetId?: string) => void
+    onCreatedTrack: (newCard: Card) => void
+    onDeleteTrack: (targetId?: string) => void
     onSeek: (t: number) => void
     onTogglePlay: () => void
     onClose: () => void
@@ -29,13 +32,13 @@ export default function StudioPanel(props: Props) {
     const tools: { id: ToolId; label: string; Icon: ComponentType<{ width?: number; height?: number; className?: string }>; body: ReactNode }[] = [
         { id: 'info', label: 'Track Info', Icon: InfoIcon, body: <TrackInfo key={card.id} card={card} onUpdate={props.onUpdate} /> },
         { id: 'stem', label: 'Stem Separator', Icon: SplitIcon, body: <StemTool card={card} stem={props.stem} onStem={props.onStem} onUpdate={props.onUpdate} /> },
-        { id: 'genre', label: 'Genre', Icon: TagIcon, body: <GenreTool card={card} onUpdate={props.onUpdate} /> },
-        { id: 'write', label: 'Write Lyrics', Icon: PenIcon, body: <WriteTool key={card.id} card={card} onUpdate={props.onUpdate} /> },
-        { id: 'sync', label: 'Sync Lyrics', Icon: ClockIcon, body: <SyncTool key={card.id + (card.lyrics?.length ?? 0)} {...props} /> },
+        { id: 'genre', label: 'Genre Transformer', Icon: TagIcon, body: <GenreTool card={card} cards={props.cards} onUpdate={props.onUpdate} onCreatedTrack={props.onCreatedTrack} /> },
+        { id: 'lyrics', label: 'Lyrics', Icon: PenIcon, body: <LyricsTool key={card.id} {...props} /> },
+        { id: 'delete', label: 'Manage Audio & Track', Icon: Trash2Icon, body: <DeleteTool card={card} onStem={props.onStem} onUpdate={props.onUpdate} onDeleteTrack={props.onDeleteTrack} /> },
     ]
 
     return (
-        <aside className="fixed inset-y-0 right-0 z-20 w-[min(92vw,360px)] animate-[studio-in_0.4s_cubic-bezier(0.3,1,0.3,1)] overflow-y-auto border-l border-white/10 bg-[#0d0d0d] p-3 text-white">
+        <aside className="fixed inset-y-0 right-0 z-20 w-[min(92vw,380px)] animate-[studio-in_0.4s_cubic-bezier(0.3,1,0.3,1)] overflow-y-auto border-l border-white/10 bg-[#0d0d0d] p-3 text-white">
             <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between bg-[#0d0d0d]/95 px-5 pt-4 pb-3 backdrop-blur-xl">
                 <span className="text-xs font-semibold tracking-[0.22em] text-white/50">STUDIO</span>
                 <IconButton

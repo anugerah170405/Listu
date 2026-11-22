@@ -5,17 +5,26 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from firebase_admin import firestore
 
-from app.api.deps import get_track_or_404
-from app.core.config import SEPARATED_DIR, TRANSFORMED_DIR, UPLOAD_DIR, url_to_local_path
+from app.api.deps import get_current_user, get_user_track
+from app.core.config import (
+    SEPARATED_DIR,
+    TRANSFORMED_DIR,
+    UPLOAD_DIR,
+    url_to_local_path,
+)
 from app.schemas.track import Track, TrackAudioAssets, TrackUpdate
 from app.services import track_repository as repo
 
 router = APIRouter()
 
-FFPROBE_BIN = shutil.which("ffprobe") or "/opt/homebrew/bin/ffprobe" or "ffprobe"
-FFMPEG_BIN = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg" or "ffmpeg"
+_HOMEBREW_FFPROBE = Path("/opt/homebrew/bin/ffprobe")
+_HOMEBREW_FFMPEG = Path("/opt/homebrew/bin/ffmpeg")
+
+FFPROBE_BIN = shutil.which("ffprobe") or (str(_HOMEBREW_FFPROBE) if _HOMEBREW_FFPROBE.exists() else "ffprobe")
+FFMPEG_BIN = shutil.which("ffmpeg") or (str(_HOMEBREW_FFMPEG) if _HOMEBREW_FFMPEG.exists() else "ffmpeg")
 
 FIELD_PATHS = {
     "lyrics_lines": "lyrics.lines",
@@ -71,21 +80,27 @@ def delete_track_files(track: Track) -> None:
     for url in urls:
         path = url_to_local_path(url)
         if path:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     for folder in (UPLOAD_DIR, SEPARATED_DIR, TRANSFORMED_DIR):
-        for f in folder.glob(f"{track.id}_*"):
-            f.unlink(missing_ok=True)
+        for f in folder.glob(f"{track.id}*"):
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 @router.get("", response_model=List[Track], summary="Get all tracks")
-def list_tracks():
-    return repo.get_all_tracks()
+def list_tracks(user: dict = Depends(get_current_user)):
+    return repo.get_all_tracks(user_id=user["uid"])
 
 
 @router.get("/{track_id}", response_model=Track, summary="Get track detail")
-def get_track_detail(track_id: str):
-    return get_track_or_404(track_id)
+def get_track_detail(track_id: str, user: dict = Depends(get_current_user)):
+    return get_user_track(track_id, user)
 
 
 @router.post("", response_model=Track, status_code=status.HTTP_201_CREATED, summary="Create new track with audio file")
@@ -97,6 +112,7 @@ def create_track(
     cover_url: Optional[str] = Form(None),
     genre: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    user: dict = Depends(get_current_user),
 ):
     if file and not (file.content_type or "").startswith("audio/"):
         raise HTTPException(
@@ -133,6 +149,7 @@ def create_track(
 
     track = Track(
         id=track_id,
+        user_id=user["uid"],
         title=title,
         artist=artist,
         duration=duration,
@@ -144,8 +161,8 @@ def create_track(
 
 
 @router.patch("/{track_id}", response_model=Track, summary="Update track metadata")
-def update_track_metadata(track_id: str, payload: TrackUpdate):
-    track = get_track_or_404(track_id)
+def update_track_metadata(track_id: str, payload: TrackUpdate, user: dict = Depends(get_current_user)):
+    track = get_user_track(track_id, user)
 
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -156,8 +173,8 @@ def update_track_metadata(track_id: str, payload: TrackUpdate):
 
 
 @router.post("/{track_id}/cover", response_model=Track, summary="Upload track cover image")
-def upload_track_cover(track_id: str, file: UploadFile = File(...)):
-    get_track_or_404(track_id)
+def upload_track_cover(track_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    get_user_track(track_id, user)
 
     ext = Path(file.filename or "cover.jpg").suffix or ".jpg"
     cover_url = save_upload(file, f"{track_id}_cover_{uuid.uuid4().hex[:6]}{ext}")
@@ -166,9 +183,56 @@ def upload_track_cover(track_id: str, file: UploadFile = File(...)):
     return repo.get_track(track_id)
 
 
+def delete_processed_audio_files(track: Track) -> None:
+    urls = [
+        track.audio.vocals_url,
+        track.audio.instrumental_url,
+    ]
+    for url in urls:
+        path = url_to_local_path(url)
+        if path:
+            path.unlink(missing_ok=True)
+
+    for f in SEPARATED_DIR.glob(f"{track.id}*"):
+        f.unlink(missing_ok=True)
+
+
+@router.delete("/{track_id}/lyrics", response_model=Track, summary="Delete track lyrics")
+def remove_lyrics(
+    track_id: str,
+    user: dict = Depends(get_current_user),
+):
+    get_user_track(track_id, user)
+    repo.update_track_fields(track_id, {
+        "lyrics.lines": [],
+        "lyrics.line_times": [],
+        "lyrics.language": None,
+        "processing.lyrics": firestore.DELETE_FIELD,
+    })
+    return repo.get_track(track_id)
+
+
+@router.delete("/{track_id}/processed-audio", response_model=Track, summary="Delete separated stems")
+def remove_processed_audio(
+    track_id: str,
+    user: dict = Depends(get_current_user),
+):
+    track = get_user_track(track_id, user)
+    delete_processed_audio_files(track)
+    repo.update_track_fields(track_id, {
+        "audio.vocals_url": None,
+        "audio.instrumental_url": None,
+        "processing.separator": firestore.DELETE_FIELD,
+    })
+    return repo.get_track(track_id)
+
+
 @router.delete("/{track_id}", summary="Delete track and physical files")
-def remove_track(track_id: str):
-    track = get_track_or_404(track_id)
+def remove_track(
+    track_id: str,
+    user: dict = Depends(get_current_user),
+):
+    track = get_user_track(track_id, user)
     delete_track_files(track)
     repo.delete_track(track_id)
     return {"message": f"Track '{track_id}' and its physical files were successfully deleted."}

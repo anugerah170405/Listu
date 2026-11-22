@@ -69,9 +69,10 @@ export function layoutLyrics(
         return block
     })
 
+    const prevAct = ly.act || []
     ly.lines = lines
     ly.layoutW = viewportWidth
-    ly.act = lines.map(() => 0)
+    ly.act = lines.map((_, i) => prevAct[i] ?? (i === ly.activeLine ? 1 : 0))
 }
 
 export function findLyricIndexAt(
@@ -86,4 +87,3 @@ export function findLyricIndexAt(
     }
     return -1
 }
-

@@ -10,10 +10,8 @@ OUTPUT_DIR = BASE_DIR / "output"
 UPLOAD_DIR = OUTPUT_DIR / "uploads"
 SEPARATED_DIR = OUTPUT_DIR / "separated"
 TRANSFORMED_DIR = OUTPUT_DIR / "transformed"
-LYRICS_DIR = OUTPUT_DIR / "lyrics"
-EXPORTS_DIR = OUTPUT_DIR / "exports"
 
-for folder in (UPLOAD_DIR, SEPARATED_DIR, TRANSFORMED_DIR, LYRICS_DIR, EXPORTS_DIR):
+for folder in (UPLOAD_DIR, SEPARATED_DIR, TRANSFORMED_DIR):
     folder.mkdir(parents=True, exist_ok=True)
 
 URL_PREFIX = "/output/"

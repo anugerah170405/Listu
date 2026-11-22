@@ -5,9 +5,14 @@ export type SnackbarData = {
 }
 
 export function showSnackbar(
-    message: string,
+    message: unknown,
     type: 'loading' | 'success' | 'error' = 'success',
     duration?: number
 ) {
-    window.dispatchEvent(new CustomEvent('listu-snackbar', { detail: { message, type, duration } }))
+    const text = message instanceof Error ? message.message : String(message || 'Something went wrong')
+    window.dispatchEvent(new CustomEvent<SnackbarData | null>('listu-snackbar', { detail: { message: text, type, duration } }))
+}
+
+export function hideSnackbar() {
+    window.dispatchEvent(new CustomEvent<SnackbarData | null>('listu-snackbar', { detail: null }))
 }

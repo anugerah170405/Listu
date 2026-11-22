@@ -1,4 +1,4 @@
-import type { Card } from '../types'
+import type { Card, TaskStatus } from '../types'
 
 const API_BASE = '/api/v1'
 
@@ -6,22 +6,12 @@ export interface TrackAudioAssets {
   original_url?: string
   vocals_url?: string
   instrumental_url?: string
-  transformed_url?: string
-  mastered_url?: string
 }
 
 export interface TrackLyrics {
   lines: string[]
-  line_times: number[]
-  raw_lrc?: string
+  line_times: (number | null)[]
   language?: string
-}
-
-export interface EngineTask {
-  status: 'idle' | 'pending' | 'processing' | 'completed' | 'failed'
-  progress?: number
-  error?: string
-  updated_at?: string
 }
 
 export interface Track {
@@ -33,7 +23,7 @@ export interface Track {
   genre?: string
   audio: TrackAudioAssets
   lyrics: TrackLyrics
-  tasks: Record<string, EngineTask>
+  processing?: Record<string, TaskStatus>
   created_at: string
   updated_at: string
 }
@@ -42,16 +32,27 @@ export interface UpdateTrackPayload {
   title?: string
   artist?: string
   duration?: string
-  cover_url?: string
-  genre?: string
+  cover_url?: string | null
+  genre?: string | null
   lyrics_lines?: string[]
-  lyrics_times?: number[]
-  lyrics_language?: string
+  lyrics_times?: (number | null | undefined)[]
+  lyrics_language?: string | null
+}
+
+let authTokenGetter: (() => Promise<string | null>) | null = null
+
+export function setAuthTokenGetter(getter: () => Promise<string | null>) {
+  authTokenGetter = getter
 }
 
 export async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const isForm = options?.body instanceof FormData
-  const headers = isForm ? { ...options?.headers } : { 'Content-Type': 'application/json', ...options?.headers }
+  const token = authTokenGetter ? await authTokenGetter() : null
+  const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
+  const headers = isForm
+    ? { ...authHeader, ...options?.headers }
+    : { 'Content-Type': 'application/json', ...authHeader, ...options?.headers }
 
   const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers })
 
@@ -97,17 +98,34 @@ export function uploadTrackCover(trackId: string, file: File) {
 export const deleteTrack = (trackId: string) =>
   apiFetch<{ message: string }>(`/tracks/${trackId}`, { method: 'DELETE' })
 
+export const deleteTrackLyrics = (trackId: string) =>
+  apiFetch<Track>(`/tracks/${trackId}/lyrics`, { method: 'DELETE' })
+
+export const deleteProcessedAudio = (trackId: string) =>
+  apiFetch<Track>(`/tracks/${trackId}/processed-audio`, { method: 'DELETE' })
+
 export const separateTrackAudio = (trackId: string) =>
   apiFetch<Track>(`/separator/${trackId}`, { method: 'POST' })
 
 export const generateTrackLyrics = (trackId: string, language?: string) =>
   apiFetch<Track>(`/lyrics/${trackId}${languageQuery(language)}`, { method: 'POST' })
 
-export const alignTrackLyrics = (trackId: string, language?: string) =>
-  apiFetch<Track>(`/lyrics/${trackId}/align${languageQuery(language)}`, { method: 'POST' })
+export const transformTrackGenre = (
+  trackId: string,
+  genre: string,
+  durationLimit?: number | null,
+  includeVocals: boolean = true,
+) =>
+  apiFetch<Track>(`/transformer/${trackId}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      genre,
+      duration_limit: durationLimit ?? null,
+      include_vocals: includeVocals,
+    }),
+  })
 
 export function trackToCard(track: Track): Card {
-  const separator = track.tasks?.separator
   return {
     id: track.id,
     title: track.title,
@@ -121,7 +139,8 @@ export function trackToCard(track: Track): Card {
     lyrics: track.lyrics?.lines?.length ? track.lyrics.lines : undefined,
     lyricTimes: track.lyrics?.line_times?.length ? track.lyrics.line_times : undefined,
     language: track.lyrics?.language,
-    isSeparating: separator?.status === 'processing',
-    separationError: separator?.error,
+    processing: track.processing,
+    createdAt: track.created_at,
+    updatedAt: track.updated_at,
   }
 }

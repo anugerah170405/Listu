@@ -1,26 +1,17 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.deps import get_track_or_404, require_audio_file, run_engine_task
-from app.core.config import SEPARATED_DIR, local_path_to_url
+from app.api.deps import ensure_can_start_task, get_current_user, get_user_track, require_audio_file
 from app.schemas.track import Track
-from app.services import track_repository as repo
-from app.services.vocal_separator import VocalSeparatorEngine
+from app.services import job_queue, track_repository as repo
 
 router = APIRouter()
 
-separator_engine = VocalSeparatorEngine(output_dir=str(SEPARATED_DIR), output_format="WAV")
-
 
 @router.post("/{track_id}", response_model=Track, summary="Separate vocals and instrumental for track")
-def separate_track_by_id(track_id: str):
-    track = get_track_or_404(track_id)
+def separate_track_by_id(track_id: str, user: dict = Depends(get_current_user)):
+    track = get_user_track(track_id, user)
+    ensure_can_start_task(track_id, "separator", "Vocal separation", track=track)
     audio_path = require_audio_file(track.audio.original_url)
 
-    with run_engine_task(track_id, "separator", "Failed to separate audio"):
-        outputs = separator_engine.separate(str(audio_path))
-        repo.update_track_fields(track_id, {
-            "audio.vocals_url": local_path_to_url(outputs["vocals"]) if outputs["vocals"] else None,
-            "audio.instrumental_url": local_path_to_url(outputs["instrumental"]) if outputs["instrumental"] else None,
-        })
-
+    job_queue.run_separator(track_id=track_id, audio_path=str(audio_path))
     return repo.get_track(track_id)

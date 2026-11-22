@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, type ChangeEvent } from 'react'
+import { useState, useRef, useEffect, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { Card } from '../../../types'
 import { UploadIcon, Trash2Icon, MusicIcon } from 'lucide-react'
 import { uploadTrackCover } from '../../../services/api'
-import Button from '../../ui/Button'
 import TextInput from '../../ui/TextInput'
 import { showSnackbar } from '../../../utils/snackbar'
+import { formatDate } from '../../../utils/format'
 
 type TrackInfoProps = {
     card: Card
@@ -53,21 +53,40 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
         showSnackbar('Track cover removed', 'success')
     }
 
-    const handleSave = () => {
+    const commitMetadata = () => {
         const cleanTitle = title.trim() || 'Untitled Track'
         const cleanArtist = artist.trim() || 'Unknown Artist'
-        const cleanCover = coverUrl.trim() || undefined
 
         setTitle(cleanTitle)
         setArtist(cleanArtist)
-        onUpdate({ title: cleanTitle, artist: cleanArtist, src: cleanCover })
-        showSnackbar('Track metadata saved successfully', 'success')
+
+        if (cleanTitle !== card.title || cleanArtist !== card.artist) {
+            onUpdate({ title: cleanTitle, artist: cleanArtist })
+            showSnackbar('Track metadata updated', 'success')
+        }
     }
 
-    const hasChanges =
-        title !== card.title ||
-        artist !== card.artist ||
-        (coverUrl || undefined) !== (card.src || undefined)
+    const blurOnEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+    }
+
+    const lineCount = card.lyrics?.length ?? 0
+    const synced = card.lyricTimes?.filter((t) => typeof t === 'number').length ?? 0
+    const sources = [
+        card.audio && 'Original',
+        card.vocalsAudio && 'Vocals',
+        card.instrumentalAudio && 'Instrumental',
+    ].filter(Boolean)
+    const details: [string, string][] = [
+        ['Duration', card.duration || '-'],
+        ['Genre', card.genre || '-'],
+        ['Language', card.language || '-'],
+        ['Lyrics', lineCount ? `${lineCount} lines${synced ? ` (${synced} synced)` : ''}` : 'None'],
+        ['Audio', sources.length ? sources.join(', ') : 'None'],
+        ['Track ID', card.id],
+        ['Created', formatDate(card.createdAt)],
+        ['Updated', formatDate(card.updatedAt)],
+    ]
 
     return (
         <div className="space-y-3">
@@ -98,11 +117,11 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
                     )}
 
                     {uploading ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                         </div>
                     ) : (
-                        <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/55 backdrop-blur-xs opacity-0 transition-opacity duration-200 group-hover/thumb:opacity-100">
+                        <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/55 opacity-0 transition-opacity duration-200 group-hover/thumb:opacity-100">
                             <button
                                 type="button"
                                 title="Change Cover"
@@ -111,7 +130,7 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
                                     e.stopPropagation()
                                     fileInputRef.current?.click()
                                 }}
-                                className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white backdrop-blur-md transition-all hover:bg-white hover:text-black active:scale-90 cursor-pointer"
+                                className="grid h-8 w-8 place-items-center rounded-full bg-white/20 text-white transition-all hover:bg-white hover:text-black active:scale-90 cursor-pointer"
                             >
                                 <UploadIcon width={14} height={14} />
                             </button>
@@ -124,7 +143,7 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
                                         e.stopPropagation()
                                         handleRemoveCover()
                                     }}
-                                    className="grid h-8 w-8 place-items-center rounded-full bg-red-500/25 text-red-200 backdrop-blur-md transition-all hover:bg-red-500 hover:text-white active:scale-90 cursor-pointer"
+                                    className="grid h-8 w-8 place-items-center rounded-full bg-red-500/25 text-red-200 transition-all hover:bg-red-500 hover:text-white active:scale-90 cursor-pointer"
                                 >
                                     <Trash2Icon width={14} height={14} />
                                 </button>
@@ -139,6 +158,8 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
                         label="Title"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
+                        onBlur={commitMetadata}
+                        onKeyDown={blurOnEnter}
                         placeholder="Track title"
                     />
                     <TextInput
@@ -146,22 +167,23 @@ export default function TrackInfo({ card, onUpdate }: TrackInfoProps) {
                         label="Artist"
                         value={artist}
                         onChange={(e) => setArtist(e.target.value)}
+                        onBlur={commitMetadata}
+                        onKeyDown={blurOnEnter}
                         placeholder="Artist name"
                     />
                 </div>
             </div>
 
-            <div className="pt-1">
-                <Button
-                    variant="primary"
-                    size="md"
-                    fullWidth
-                    onClick={handleSave}
-                    disabled={!hasChanges}
-                >
-                    Save
-                </Button>
-            </div>
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-2xl bg-white/[0.04] p-3 text-[11px]">
+                {details.map(([label, value]) => (
+                    <div key={label} className="min-w-0">
+                        <dt className="text-white/35">{label}</dt>
+                        <dd className="truncate font-medium text-white/80" title={value}>
+                            {value}
+                        </dd>
+                    </div>
+                ))}
+            </dl>
         </div>
     )
 }
