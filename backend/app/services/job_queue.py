@@ -23,6 +23,11 @@ def is_busy() -> bool:
         return _current_job is not None
 
 
+def get_active_job() -> Optional[Dict[str, str]]:
+    with _lock:
+        return _current_job.copy() if _current_job else None
+
+
 def update_task_status(
     track_id: str,
     task_name: str,

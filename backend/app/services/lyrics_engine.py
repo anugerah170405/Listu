@@ -49,15 +49,17 @@ class LyricsEngine:
             raise FileNotFoundError(f"Audio file not found: {path}")
         return audio.resolve()
 
-    def transcribe_and_sync(self, vocal_audio_path: str, language: Optional[str] = None, vad: bool = True) -> Dict[str, Any]:
+    def transcribe_and_sync(self, vocal_audio_path: str, language: Optional[str] = None) -> Dict[str, Any]:
         self._load_model()
         audio = self._resolve_audio(vocal_audio_path)
+        fp16 = self.device == "cuda"
 
         result = self._model.transcribe(
             str(audio),
             language=normalize_language(language),
-            vad=vad,
+            vad=False,
             beam_size=1,
+            fp16=fp16,
             regroup=True,
         )
         return self._format_result(result)

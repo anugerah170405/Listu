@@ -48,8 +48,10 @@ def force_exit(signum, frame):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run startup cleanup in background so uvicorn binds port 8000 immediately
-    threading.Thread(target=cleanup_stale_processing_tasks, daemon=True).start()
+    try:
+        cleanup_stale_processing_tasks(active_job=job_queue.get_active_job())
+    except Exception as exc:
+        logger.warning("Startup cleanup error: %s", exc)
     yield
     handle_shutdown()
 
@@ -94,4 +96,11 @@ def root():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+    uvicorn.run(
+        "app.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=True,
+        reload_dirs=["app"],
+        reload_excludes=["output/*", "output/**/*", "*.wav", "*.mp3", "*.jpg", "*.png"],
+    )

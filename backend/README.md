@@ -40,7 +40,7 @@ pip install -r requirements.txt
 
 ### 3. Jalankan Server
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --reload-dir app --port 8000
 ```
 Server akan berjalan di `http://127.0.0.1:8000`.
 

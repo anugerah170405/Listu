@@ -100,7 +100,7 @@ cd listu
 
 5. **Jalankan Server Backend:**
    ```bash
-   uvicorn app.main:app --reload --port 8000
+   uvicorn app.main:app --reload --reload-dir app --port 8000
    ```
    * Backend akan aktif di: `http://127.0.0.1:8000`
    * Dokumentasi Swagger API: `http://127.0.0.1:8000/docs`

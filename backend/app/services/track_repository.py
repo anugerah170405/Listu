@@ -70,8 +70,13 @@ def delete_track(track_id: str) -> None:
     _doc(track_id).delete()
 
 
-def cleanup_stale_processing_tasks() -> int:
-    #Reset any task stuck in 'processing' state when backend server starts up.
+SERVER_BOOT_TIME = datetime.now(timezone.utc)
+
+
+def cleanup_stale_processing_tasks(active_job: Optional[Dict[str, str]] = None) -> int:
+    """Reset any task stuck in 'processing' state from a PREVIOUS crashed server instance.
+    Never marks a task failed if it was updated after the current server booted or is actively executing.
+    """
     count = 0
     try:
         docs = db.collection(COLLECTION_NAME).stream()
@@ -83,6 +88,20 @@ def cleanup_stale_processing_tasks() -> int:
             updates: Dict[str, Any] = {}
             for task_name, task_data in proc.items():
                 if isinstance(task_data, dict) and task_data.get("status") == "processing":
+                    # Jangan reset jika sedang aktif dijalankan di proses saat ini
+                    if active_job and active_job.get("track_id") == doc.id and active_job.get("task_name") == task_name:
+                        continue
+
+                    # Jangan reset jika task ini baru saja dibuat/diupdate setelah server ini boot
+                    updated_at_str = task_data.get("updated_at")
+                    if updated_at_str:
+                        try:
+                            dt = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+                            if dt >= SERVER_BOOT_TIME:
+                                continue
+                        except Exception:
+                            pass
+
                     updates[f"processing.{task_name}.status"] = "failed"
                     updates[f"processing.{task_name}.error"] = "Process interrupted (server restarted)"
                     updates[f"processing.{task_name}.updated_at"] = now_iso()
