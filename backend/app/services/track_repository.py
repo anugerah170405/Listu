@@ -88,11 +88,11 @@ def cleanup_stale_processing_tasks(active_job: Optional[Dict[str, str]] = None) 
             updates: Dict[str, Any] = {}
             for task_name, task_data in proc.items():
                 if isinstance(task_data, dict) and task_data.get("status") == "processing":
-                    # Jangan reset jika sedang aktif dijalankan di proses saat ini
+                    # Do not reset if actively executing in current process
                     if active_job and active_job.get("track_id") == doc.id and active_job.get("task_name") == task_name:
                         continue
 
-                    # Jangan reset jika task ini baru saja dibuat/diupdate setelah server ini boot
+                    # Do not reset if this task was created/updated after this server booted
                     updated_at_str = task_data.get("updated_at")
                     if updated_at_str:
                         try:

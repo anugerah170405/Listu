@@ -14,7 +14,7 @@ _lock = threading.Lock()
 _current_job: Optional[Dict[str, str]] = None
 
 separator_engine = VocalSeparatorEngine(output_dir=str(SEPARATED_DIR), output_format="WAV")
-lyrics_engine = LyricsEngine(model_size="small")
+lyrics_engine = LyricsEngine(model_size="medium")
 transformer_engine = MusicTransformerEngine(output_dir=str(TRANSFORMED_DIR))
 
 

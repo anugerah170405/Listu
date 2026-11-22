@@ -37,7 +37,7 @@ Proyek ini dikembangkan oleh:
 | **3D & Visuals** | Three.js, Custom GLSL Shaders | Visualisasi kartu 3D dan liquid canvas interaktif |
 | **Backend API** | Python 3.10+, FastAPI, Uvicorn | RESTful API asynchronous berkinerja tinggi |
 | **AI Models** | PyTorch, Hugging Face Transformers | MusicGen-Melody (Meta), Faster-Whisper, Audio-Separator |
-| **Audio Core** | FFmpeg (via `static-ffmpeg`), SoundFile, Librosa | Pemrosesan, decoding, dan filtering audio digital |
+| **Audio Core** | FFmpeg (via `static-ffmpeg`), SoundFile, SciPy | Pemrosesan, decoding, dan filtering audio digital |
 | **Database & Auth** | Google Firebase (Auth & Cloud Firestore) | Manajemen sesi pengguna dan penyimpanan metadata trek |
 
 ---

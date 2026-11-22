@@ -24,7 +24,7 @@ class LyricsEngine:
 
     @staticmethod
     def _detect_device() -> str:
-        # Word-level DTW butuh float64 yang belum didukung MPS, jadi Mac memakai CPU
+        # Word-level DTW requires float64 which is not yet supported by MPS, so Mac falls back to CPU
         try:
             import torch
 
@@ -41,7 +41,19 @@ class LyricsEngine:
             raise ImportError("'stable-ts' library is not installed. Run: pip install stable-ts") from e
 
         logger.info("Loading Whisper (%s) on device: %s", self.model_size, self.device)
-        self._model = stable_whisper.load_model(self.model_size, device=self.device)
+        try:
+            self._model = stable_whisper.load_model(self.model_size, device=self.device)
+        except RuntimeError as e:
+            if "checksum does not" in str(e).lower():
+                cache_file = Path.home() / ".cache" / "whisper" / f"{self.model_size}.pt"
+                if cache_file.exists():
+                    logger.warning("Corrupted Whisper cache detected at %s. Deleting and retrying...", cache_file)
+                    cache_file.unlink(missing_ok=True)
+                    self._model = stable_whisper.load_model(self.model_size, device=self.device)
+                else:
+                    raise
+            else:
+                raise
 
     def _resolve_audio(self, path: str) -> Path:
         audio = Path(path)

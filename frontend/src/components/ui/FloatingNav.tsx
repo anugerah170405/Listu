@@ -302,7 +302,7 @@ export default function FloatingNav({
                                                     return
                                                 }
                                                 if (error?.code === 'auth/unauthorized-domain') {
-                                                    showSnackbar('Domain belum diizinkan di Firebase. Pastikan buka lewat localhost:5173', 'error')
+                                                    showSnackbar('Domain is not authorized in Firebase. Make sure to open via localhost:5173', 'error')
                                                     return
                                                 }
                                                 const msg = error?.message || 'Failed to sign in'

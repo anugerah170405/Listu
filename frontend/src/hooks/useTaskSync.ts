@@ -116,9 +116,9 @@ export function useTaskSync({
         const errorMsg =
           err instanceof Error && err.message
             ? err.message
-            : 'Koneksi ke backend terputus saat memproses task'
+            : 'Connection to backend lost while processing task'
 
-        showSnackbar(`Gagal menghubungi backend: ${errorMsg}`, 'error')
+        showSnackbar(`Failed to reach backend: ${errorMsg}`, 'error')
 
         // Mark currently processing tasks as failed so UI doesn't hang forever
         setCards((prev) =>
@@ -132,7 +132,7 @@ export function useTaskSync({
                 nextProcessing[tName] = {
                   ...tVal,
                   status: 'failed',
-                  error: 'Koneksi ke backend terputus',
+                  error: 'Connection to backend lost',
                   updated_at: new Date().toISOString(),
                 }
                 hasChanged = true

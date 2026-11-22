@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     if (!auth) {
-      throw new Error('Firebase API Key belum diisi di frontend/.env')
+      throw new Error('Firebase API Key is missing in frontend/.env')
     }
     await signInWithPopup(auth, googleProvider)
   }
